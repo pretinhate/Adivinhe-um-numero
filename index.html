@@ -26,10 +26,8 @@
             background-color: rgba(0, 0, 0, 0.7);
         }
 
-        /* Estilo para a lista de placar */
-        .score-item:nth-child(1) .rank-badge { @apply bg-yellow-500; }
-        .score-item:nth-child(2) .rank-badge { @apply bg-gray-400; }
-        .score-item:nth-child(3) .rank-badge { @apply bg-amber-700; }
+        /* Estilo para a lista de placar. A aplicação de cores dos top 3 foi movida para o JavaScript. */
+        /* As regras de @apply não são suportadas no CDN e foram removidas daqui. */
     </style>
     <!-- Configuração do Tailwind para usar a fonte Inter e cores personalizadas -->
     <script>
@@ -261,9 +259,21 @@
 
             leaderboardContainer.innerHTML = scores.map((score, index) => {
                 const rank = index + 1;
+                let rankClass = 'bg-gray-500'; // Cor padrão para os demais
+                
+                // Define a cor de acordo com o ranking (coroas)
+                if (rank === 1) {
+                    rankClass = 'bg-yellow-500'; // Ouro
+                } else if (rank === 2) {
+                    rankClass = 'bg-gray-400';   // Prata
+                } else if (rank === 3) {
+                    rankClass = 'bg-amber-700';  // Bronze
+                }
+                
+                // Removemos o 'rank-badge' do HTML e aplicamos as classes de cor diretamente
                 return `
                     <div class="score-item flex justify-between items-center p-3 rounded-lg bg-gray-700 shadow-md">
-                        <span class="rank-badge w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold text-white mr-2">
+                        <span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold text-white mr-2 ${rankClass}">
                             ${rank}
                         </span>
                         <span class="flex-grow text-white font-medium truncate">${score.nickname}</span>
