@@ -60,7 +60,7 @@ Se você deseja rodar este projeto ou contribuir localmente:
 
 Clone o repositório:
 
-bash [https://github.com/pretinhate/Adivinhe-um-numero](https://github.com/pretinhate/Adivinhe-um-numero)
+git clone [https://github.com/pretinhate/Adivinhe-um-numero](https://github.com/pretinhate/Adivinhe-um-numero)
 
 Abra o arquivo index.html diretamente no seu navegador.
 
