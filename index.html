@@ -25,9 +25,6 @@
         .modal-overlay {
             background-color: rgba(0, 0, 0, 0.7);
         }
-
-        /* Estilo para a lista de placar. A aplicação de cores dos top 3 foi movida para o JavaScript. */
-        /* As regras de @apply não são suportadas no CDN e foram removidas daqui. */
     </style>
     <!-- Configuração do Tailwind para usar a fonte Inter e cores personalizadas -->
     <script>
@@ -159,10 +156,39 @@
         // Configurações e Variáveis Globais
         setLogLevel('Debug');
         
+        // --- 1. CONFIGURAÇÃO FIREBASE PARA AMBIENTES EXTERNOS (GIT/LOCAL) ---
+        // Se você está rodando este código fora do Canvas, as variáveis __app_id, __firebase_config 
+        // e __initial_auth_token não existem. Para habilitar o Placar Global, você DEVE
+        // substituir a variável 'localFirebaseConfig' abaixo pela configuração do SEU projeto Firebase.
+        
+        const localFirebaseConfig = {
+            // apiKey: "SEU_API_KEY",
+            // authDomain: "SEU_AUTH_DOMAIN",
+            // projectId: "SEU_PROJECT_ID",
+            // storageBucket: "SEU_STORAGE_BUCKET",
+            // messagingSenderId: "SEU_MESSAGING_SENDER_ID",
+            // appId: "SEU_APP_ID"
+        };
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        
+        // Usa a configuração do Canvas se existir, senão usa a configuração local (se fornecida)
+        let firebaseConfig = {};
+        try {
+             firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        } catch (e) {
+            console.error("Erro ao fazer parse da configuração do Firebase. Usando configuração local.");
+        }
+        
+        // Se a configuração do Canvas falhar ou estiver vazia, tentamos usar a configuração local
+        if (Object.keys(firebaseConfig).length === 0 && Object.keys(localFirebaseConfig).length > 0) {
+            firebaseConfig = localFirebaseConfig;
+        }
+
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
         
+        // --- FIM DA CONFIGURAÇÃO FIREBASE ---
+
         let db;
         let auth;
         let userId;
@@ -197,12 +223,21 @@
          */
         async function initFirebase() {
             try {
-                if (Object.keys(firebaseConfig).length === 0) {
-                    console.error("Firebase config not available. Leaderboard will not function.");
-                    leaderboardContainer.innerHTML = `<p class="text-lose text-center">Placar indisponível (Firebase não configurado).</p>`;
-                    currentUserIdDisplay.textContent = "Erro de conexão Firebase.";
-                    currentUserIdDisplay.classList.remove('text-gray-500');
+                if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.projectId) {
+                    console.error("Configuração do Firebase não está completa. O Placar Global está DESATIVADO.");
+                    leaderboardContainer.innerHTML = `<p class="text-lose text-center">Placar DESATIVADO: Configure seu Firebase para uso local.</p>`;
+                    currentUserIdDisplay.textContent = "Status: Placar Desativado.";
+                    currentUserIdDisplay.classList.remove('text-gray-500', 'text-accent');
                     currentUserIdDisplay.classList.add('text-lose');
+                    // Ainda tentamos login anônimo se possível para obter um userId, mas ignoramos o erro
+                    try {
+                        const app = initializeApp({}); // Inicializa com objeto vazio para evitar crash
+                        auth = getAuth(app);
+                        await signInAnonymously(auth);
+                        userId = auth.currentUser?.uid || crypto.randomUUID();
+                    } catch {
+                        userId = crypto.randomUUID();
+                    }
                     return;
                 }
                 
@@ -221,7 +256,7 @@
                 
                 // Atualiza o status de conexão
                 currentUserIdDisplay.textContent = `Seu ID: ${userId}`;
-                currentUserIdDisplay.classList.remove('text-gray-500');
+                currentUserIdDisplay.classList.remove('text-gray-500', 'text-lose');
                 currentUserIdDisplay.classList.add('text-accent');
 
                 console.log("Firebase e autenticação inicializados. User ID:", userId);
@@ -233,7 +268,7 @@
                 console.error("Erro ao inicializar Firebase:", error);
                 leaderboardContainer.innerHTML = `<p class="text-lose text-center">Erro ao conectar com o Placar.</p>`;
                 currentUserIdDisplay.textContent = "Erro de conexão Firebase.";
-                currentUserIdDisplay.classList.remove('text-gray-500');
+                currentUserIdDisplay.classList.remove('text-gray-500', 'text-accent');
                 currentUserIdDisplay.classList.add('text-lose');
             }
         }
@@ -270,7 +305,7 @@
                     rankClass = 'bg-amber-700';  // Bronze
                 }
                 
-                // Removemos o 'rank-badge' do HTML e aplicamos as classes de cor diretamente
+                // Aplica as classes de cor diretamente ao elemento do rank
                 return `
                     <div class="score-item flex justify-between items-center p-3 rounded-lg bg-gray-700 shadow-md">
                         <span class="w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold text-white mr-2 ${rankClass}">
@@ -314,6 +349,14 @@
          * Mostra o modal de recorde após a vitória.
          */
         function showScoreModal(attempts) {
+            if (!db) {
+                // Se o Firebase não estiver inicializado (erro local), pula o salvamento do score.
+                // Apenas exibe a mensagem de vitória e reinicia o jogo.
+                alert(`🎉 Parabéns! Você adivinhou em ${attempts} tentativas! O Placar Global está desativado.`);
+                initGame();
+                return;
+            }
+            
             modalMessage.textContent = `Você adivinhou em ${attempts} tentativas! Insira seu nickname (máx. 12 caracteres) para salvar seu feito no Placar Global!`;
             nicknameInput.value = '';
             scoreModal.classList.remove('hidden');
@@ -333,14 +376,13 @@
             const nickname = nicknameInput.value.trim().substring(0, 12);
 
             if (!nickname || nickname.length < 2) {
-                // Modificado para usar um modal customizado no futuro, mas mantendo a simplicidade por enquanto
                 alert("Por favor, insira um nickname com pelo menos 2 caracteres."); 
                 return;
             }
             
             if (!db || !userId) {
-                console.error("Database ou User ID não estão disponíveis.");
-                alert("Erro: O Placar Global não está ativo.");
+                console.error("Database ou User ID não estão disponíveis. Não é possível salvar score.");
+                alert("Erro: O Placar Global não está ativo (sem conexão com o banco de dados).");
                 return;
             }
             
@@ -358,7 +400,6 @@
                 });
 
                 hideScoreModal();
-                // Modificado para usar um modal customizado no futuro, mas mantendo a simplicidade por enquanto
                 alert(`Recorde de ${nickname} salvo com ${attempts} tentativas!`); 
                 initGame(); // Inicia um novo jogo
             } catch (e) {
@@ -423,6 +464,7 @@
             inputArea.classList.add('hidden');
 
             if (isWin) {
+                // A exibição do modal agora é controlada pela função showScoreModal, que checa a conexão.
                 showScoreModal(attempts);
             }
         }
