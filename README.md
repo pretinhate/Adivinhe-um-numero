@@ -60,7 +60,8 @@ Se você deseja rodar este projeto ou contribuir localmente:
 
 Clone o repositório:
 
-git clone https://github.com/pretinhate/Adivinhe-um-numero
+git clone [https://github.com/pretinhate/Adivinhe-um-numero](https://github.com/pretinhate/Adivinhe-um-numero)
+
 Abra o arquivo index.html diretamente no seu navegador.
 
 Nota: O placar de recordes só funcionará corretamente se o projeto estiver configurado com as chaves do Firebase (que já estão embutidas no ambiente do Netlify/Canvas).
