@@ -1,373 +1,467 @@
-<!-- 
-  Jogo: Adivinhe o Número
-  Funcionalidade: Jogo clássico de adivinhação com placar de recordes global e seleção por lista.
-  Tecnologias: HTML, Tailwind CSS, JavaScript, Firebase Firestore (para recordes).
--->
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Adivinhe o Número</title>
-    <!-- Carregamento do Tailwind CSS para estilo responsivo -->
+    <!-- Carregamento do Tailwind CSS para um design moderno e responsivo -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f3f4f6;
+        /* Define a fonte Inter e estilização de foco */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap');
+        
+        input:focus, button:focus {
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.5); 
         }
-    </style>
-</head>
-<body class="min-h-screen flex flex-col items-center justify-center p-4">
+        
+        body {
+            min-height: 100vh;
+            margin: 0;
+            background-color: #0d1217;
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .modal-overlay {
+            background-color: rgba(0, 0, 0, 0.7);
+        }
 
-    <!-- Configurações e Importações do Firebase -->
+        /* Estilo para a lista de placar */
+        .score-item:nth-child(1) .rank-badge { @apply bg-yellow-500; }
+        .score-item:nth-child(2) .rank-badge { @apply bg-gray-400; }
+        .score-item:nth-child(3) .rank-badge { @apply bg-amber-700; }
+    </style>
+    <!-- Configuração do Tailwind para usar a fonte Inter e cores personalizadas -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary-bg': '#1f2937', 
+                        'accent': '#34d399',     
+                        'win': '#10b981',        
+                        'lose': '#ef4444',       
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="flex flex-col sm:flex-row items-center justify-center p-4 gap-8">
+
+    <!-- Container Principal do Jogo (Mobile-First) -->
+    <div id="game-container" class="w-full max-w-sm bg-primary-bg p-6 rounded-xl shadow-2xl border border-gray-700 order-2 sm:order-1">
+        
+        <h1 class="text-3xl font-bold text-white mb-2 text-center">Adivinhe o Número!</h1>
+        <p class="text-gray-400 mb-6 text-center">Tente adivinhar o número secreto entre 1 e 100.</p>
+
+        <!-- Área de Input e Ação -->
+        <div id="input-area" class="flex flex-col sm:flex-row gap-3 mb-6">
+            <!-- Usando input tipo text para permitir placeholder mais descritivo -->
+            <input 
+                type="number" 
+                id="guessInput" 
+                placeholder="Seu palpite (1-100)" 
+                min="1" 
+                max="100"
+                class="flex-grow p-3 text-lg rounded-lg border-2 border-gray-600 bg-gray-700 text-white placeholder-gray-400 transition duration-200"
+            >
+            <button 
+                id="checkButton" 
+                class="w-full sm:w-auto px-6 py-3 text-lg font-bold text-primary-bg bg-accent hover:bg-win rounded-lg shadow-md transition duration-200 transform hover:scale-105"
+            >
+                Verificar
+            </button>
+        </div>
+
+        <!-- Área de Mensagens e Status -->
+        <div class="space-y-4">
+            <!-- Mensagem de Feedback -->
+            <div id="message" class="p-4 rounded-lg text-center font-semibold text-lg bg-gray-700 text-gray-300 min-h-[4rem] flex items-center justify-center">
+                Digite um número e clique em Verificar!
+            </div>
+            
+            <!-- Contador de Tentativas -->
+            <div class="flex justify-between items-center text-gray-400 font-medium">
+                <span class="text-lg">Tentativas:</span>
+                <span id="attempts" class="text-3xl font-bold text-accent">0</span>
+            </div>
+        </div>
+
+        <!-- Botão de Reset (Inicialmente Oculto) -->
+        <button 
+            id="resetButton" 
+            class="hidden w-full mt-6 px-6 py-3 text-lg font-bold text-white bg-blue-500 hover:bg-blue-600 rounded-lg shadow-md transition duration-200 transform hover:scale-105"
+        >
+            Jogar Novamente
+        </button>
+
+        <!-- Mensagem de erro/validação (oculta) -->
+        <p id="error-message" class="text-lose text-center mt-3 hidden font-medium">
+            Por favor, insira um número válido entre 1 e 100.
+        </p>
+    </div>
+
+    <!-- Container do Placar Global -->
+    <div class="w-full max-w-xs sm:max-w-sm bg-primary-bg p-6 rounded-xl shadow-2xl border border-gray-700 order-1 sm:order-2">
+        <h2 class="text-2xl font-bold text-white mb-4 text-center">🏆 Placar Global</h2>
+        
+        <!-- Lista de Scores -->
+        <div id="leaderboardContainer" class="space-y-2">
+            <!-- Placeholder de Carregamento -->
+            <div id="loadingMessage" class="text-gray-400 text-center">Carregando placar...</div>
+            
+            <!-- Scores serão injetados aqui via JavaScript -->
+        </div>
+    </div>
+
+
+    <!-- Modal de Novo Recorde (Inicialmente Oculto) -->
+    <div id="scoreModal" class="hidden modal-overlay fixed inset-0 flex items-center justify-center z-50">
+        <div class="bg-primary-bg p-8 rounded-xl shadow-2xl w-full max-w-sm m-4 transform transition-all duration-300 scale-100">
+            <h2 class="text-3xl font-bold text-win mb-4 text-center">Novo Recorde! 🎉</h2>
+            <p id="modalMessage" class="text-gray-300 mb-6 text-center">Você conseguiu em X tentativas. Insira seu nickname para salvar seu feito no Placar Global!</p>
+            
+            <input 
+                type="text" 
+                id="nicknameInput" 
+                placeholder="Seu Nickname" 
+                maxlength="12"
+                class="w-full p-3 text-lg rounded-lg border-2 border-accent bg-gray-700 text-white placeholder-gray-400 mb-4 transition duration-200"
+            >
+            
+            <button 
+                id="saveScoreButton" 
+                class="w-full px-6 py-3 text-lg font-bold text-primary-bg bg-accent hover:bg-win rounded-lg shadow-md transition duration-200 transform hover:scale-105"
+            >
+                Salvar Recorde!
+            </button>
+            <button 
+                id="closeModalButton" 
+                class="w-full mt-3 px-6 py-3 text-sm font-bold text-gray-400 hover:text-white transition duration-200"
+            >
+                Jogar Novamente (Não salvar)
+            </button>
+        </div>
+    </div>
+
+    <!-- Script para Firebase e Lógica do Jogo -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, collection, query, limit, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Variáveis globais de Firebase fornecidas pelo ambiente
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, onSnapshot, collection, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Configurações e Variáveis Globais
+        setLogLevel('Debug');
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        
+        let db;
+        let auth;
+        let userId;
 
-        let app, db, auth;
-        let userId = 'anon';
+        // Variáveis globais do jogo
+        let secretNumber;
+        let attempts;
+        const maxAttempts = 10;
+        
+        // Referências aos elementos do DOM
+        const guessInput = document.getElementById('guessInput');
+        const checkButton = document.getElementById('checkButton');
+        const resetButton = document.getElementById('resetButton');
+        const messageDisplay = document.getElementById('message');
+        const attemptsDisplay = document.getElementById('attempts');
+        const errorDisplay = document.getElementById('error-message');
+        const inputArea = document.getElementById('input-area');
+        
+        // Elementos do Placar e Modal
+        const leaderboardContainer = document.getElementById('leaderboardContainer');
+        const scoreModal = document.getElementById('scoreModal');
+        const modalMessage = document.getElementById('modalMessage');
+        const nicknameInput = document.getElementById('nicknameInput');
+        const saveScoreButton = document.getElementById('saveScoreButton');
+        const closeModalButton = document.getElementById('closeModalButton');
+        const loadingMessage = document.getElementById('loadingMessage');
 
-        // Inicializa o Firebase e realiza o login
-        async function initializeFirebase() {
-            if (!firebaseConfig) {
-                console.error("Erro: Configuração do Firebase não encontrada.");
-                document.getElementById('message').textContent = "Erro ao carregar o banco de dados. Tente novamente.";
-                return;
-            }
 
+        /**
+         * Inicializa o Firebase (Auth e Firestore).
+         */
+        async function initFirebase() {
             try {
-                app = initializeApp(firebaseConfig);
-                db = getFirestore(app);
+                if (Object.keys(firebaseConfig).length === 0) {
+                    console.error("Firebase config not available. Leaderboard will not function.");
+                    leaderboardContainer.innerHTML = `<p class="text-lose text-center">Placar indisponível (Firebase não configurado).</p>`;
+                    return;
+                }
+                
+                const app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
+                db = getFirestore(app);
 
-                // Autenticação: tenta com token customizado ou anônima
+                // Autenticação: Tenta com token customizado ou anonimamente
                 if (initialAuthToken) {
                     await signInWithCustomToken(auth, initialAuthToken);
                 } else {
                     await signInAnonymously(auth);
                 }
 
-                // Ouve as mudanças no estado de autenticação
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        // Inicia o listener do placar após a autenticação
-                        setupLeaderboardListener();
-                    } else {
-                        // Usuário deslogado, mas em ambiente anônimo o userId já é 'anon'
-                        console.log("Usuário não autenticado. Usando ID anônimo.");
-                    }
-                });
-
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                
+                console.log("Firebase e autenticação inicializados. User ID:", userId);
+                
+                // Inicia o listener do placar após a autenticação
+                loadLeaderboard();
+                
             } catch (error) {
-                console.error("Erro na inicialização do Firebase ou autenticação:", error);
-                document.getElementById('message').textContent = `Erro ao conectar: ${error.message}`;
+                console.error("Erro ao inicializar Firebase:", error);
+                leaderboardContainer.innerHTML = `<p class="text-lose text-center">Erro ao conectar com o Placar.</p>`;
             }
         }
+        
+        /**
+         * Gera o caminho da coleção para o Placar Global.
+         */
+        function getLeaderboardCollectionRef() {
+            // O placar é público para todos os usuários do app
+            return collection(db, `artifacts/${appId}/public/data/scores`);
+        }
 
-        // Função para salvar a pontuação no Firestore
-        window.saveScore = async (nickname, attempts) => {
-            if (!db || !userId) {
-                console.error("Banco de dados ou ID do usuário não disponível.");
+        /**
+         * Renderiza o placar a partir de um snapshot do Firestore.
+         */
+        function renderLeaderboard(scores) {
+            loadingMessage.classList.add('hidden');
+            
+            if (scores.length === 0) {
+                leaderboardContainer.innerHTML = `<p class="text-gray-400 text-center mt-4">Nenhum recorde ainda. Seja o primeiro!</p>`;
                 return;
             }
 
-            const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
-            
-            try {
-                // Cria um ID de documento único (poderia ser o UID do usuário, mas permite múltiplos scores)
-                const scoreData = {
-                    nickname: nickname || 'Anônimo',
-                    attempts: attempts,
-                    timestamp: new Date().toISOString(),
-                    userId: userId,
-                };
-                
-                // Salva a pontuação
-                await setDoc(doc(leaderboardRef), scoreData);
-                console.log("Pontuação salva com sucesso!");
+            leaderboardContainer.innerHTML = scores.map((score, index) => {
+                const rank = index + 1;
+                return `
+                    <div class="score-item flex justify-between items-center p-3 rounded-lg bg-gray-700 shadow-md">
+                        <span class="rank-badge w-6 h-6 flex items-center justify-center rounded-full text-xs font-bold text-white mr-2">
+                            ${rank}
+                        </span>
+                        <span class="flex-grow text-white font-medium truncate">${score.nickname}</span>
+                        <span class="text-accent font-bold">${score.attempts} tentativas</span>
+                    </div>
+                `;
+            }).join('');
+        }
 
-            } catch (e) {
-                console.error("Erro ao adicionar documento: ", e);
-                document.getElementById('message').textContent = `Erro ao salvar pontuação: ${e.message}`;
-            }
-        };
-
-        // Função para ouvir e atualizar o placar em tempo real
-        function setupLeaderboardListener() {
+        /**
+         * Carrega o placar em tempo real usando onSnapshot.
+         */
+        function loadLeaderboard() {
             if (!db) return;
 
-            const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
-            // Consulta: Tenta ordenar pelo menor número de tentativas
-            const q = query(leaderboardRef, limit(10)); 
+            // Ordena por 'attempts' (tentativas) de forma ascendente e limita aos 10 melhores
+            const scoresQuery = query(
+                getLeaderboardCollectionRef(),
+                orderBy('attempts', 'asc'),
+                orderBy('timestamp', 'asc'), // Critério de desempate
+                limit(10)
+            );
 
-            onSnapshot(q, async (querySnapshot) => {
+            // Listener em tempo real
+            onSnapshot(scoresQuery, (snapshot) => {
                 const scores = [];
-                querySnapshot.forEach((doc) => {
-                    const data = doc.data();
-                    scores.push(data);
+                snapshot.forEach((doc) => {
+                    scores.push(doc.data());
+                });
+                renderLeaderboard(scores);
+            }, (error) => {
+                console.error("Erro ao carregar placar:", error);
+                leaderboardContainer.innerHTML = `<p class="text-lose text-center">Falha ao carregar placar.</p>`;
+            });
+        }
+
+        /**
+         * Mostra o modal de recorde após a vitória.
+         */
+        function showScoreModal(attempts) {
+            modalMessage.textContent = `Você adivinhou em ${attempts} tentativas! Insira seu nickname (máx. 12 caracteres) para salvar seu feito no Placar Global!`;
+            nicknameInput.value = '';
+            scoreModal.classList.remove('hidden');
+        }
+
+        /**
+         * Esconde o modal de recorde.
+         */
+        function hideScoreModal() {
+            scoreModal.classList.add('hidden');
+        }
+
+        /**
+         * Salva a pontuação no Firestore.
+         */
+        async function saveScore() {
+            const nickname = nicknameInput.value.trim().substring(0, 12);
+
+            if (!nickname || nickname.length < 2) {
+                alert("Por favor, insira um nickname com pelo menos 2 caracteres.");
+                return;
+            }
+            
+            if (!db || !userId) {
+                console.error("Database ou User ID não estão disponíveis.");
+                alert("Erro: O Placar Global não está ativo.");
+                return;
+            }
+            
+            saveScoreButton.disabled = true;
+            saveScoreButton.textContent = "Salvando...";
+
+            try {
+                // Adiciona o novo recorde
+                await addDoc(getLeaderboardCollectionRef(), {
+                    nickname: nickname,
+                    attempts: attempts,
+                    timestamp: Date.now(),
+                    // Guarda o userId para referência, mas a query de placar é global
+                    recordedBy: userId 
                 });
 
-                // Ordena em memória (já que o Firestore pode ter problemas de índice no orderBy)
-                scores.sort((a, b) => a.attempts - b.attempts);
-
-                updateLeaderboardUI(scores);
-            }, (error) => {
-                console.error("Erro ao ouvir o placar:", error);
-            });
-        }
-
-        // Função para renderizar o placar na UI
-        function updateLeaderboardUI(scores) {
-            const list = document.getElementById('leaderboardList');
-            if (!list) return;
-
-            list.innerHTML = ''; // Limpa a lista atual
-
-            if (scores.length === 0) {
-                list.innerHTML = '<li class="p-2 text-center text-gray-500">Nenhum recorde ainda. Seja o primeiro!</li>';
-                return;
-            }
-
-            scores.forEach((score, index) => {
-                const li = document.createElement('li');
-                li.className = `flex justify-between items-center p-3 rounded-xl shadow-md ${index < 3 ? 'bg-yellow-100 border-2 border-yellow-500' : 'bg-white'}`;
-                
-                // Formata o Rank
-                const rank = index + 1;
-                const rankDisplay = document.createElement('span');
-                rankDisplay.className = 'font-bold text-lg w-1/12 text-center';
-                rankDisplay.textContent = `#${rank}`;
-
-                // Formata o Nickname
-                const nicknameDisplay = document.createElement('span');
-                nicknameDisplay.className = 'flex-grow font-semibold text-gray-800 ml-4';
-                nicknameDisplay.textContent = score.nickname.substring(0, 20); // Limita o tamanho do nick
-
-                // Formata as Tentativas
-                const attemptsDisplay = document.createElement('span');
-                attemptsDisplay.className = 'text-right font-bold text-purple-600 w-2/12';
-                attemptsDisplay.textContent = `${score.attempts} Tentativas`;
-
-                li.appendChild(rankDisplay);
-                li.appendChild(nicknameDisplay);
-                li.appendChild(attemptsDisplay);
-                list.appendChild(li);
-            });
-        }
-
-        initializeFirebase();
-
-        // Expõe funções ao escopo global para acesso pelo HTML/JS do jogo
-        window.initializeFirebase = initializeFirebase;
-        window.updateLeaderboardUI = updateLeaderboardUI;
-    </script>
-    
-    <!-- Lógica do Jogo -->
-    <script>
-        let secretNumber;
-        let attempts = 0;
-        const maxAttempts = 10;
-        let gameActive = false;
-        
-        // Elementos UI
-        const guessSelect = document.getElementById('guessSelect');
-        const messageElement = document.getElementById('message');
-        const attemptsLeftElement = document.getElementById('attemptsLeft');
-        const guessButton = document.getElementById('guessButton');
-        const restartButton = document.getElementById('restartButton');
-        const modal = document.getElementById('scoreModal');
-        const nicknameInput = document.getElementById('nicknameInput');
-
-        // Inicializa o jogo ao carregar a página
-        window.onload = () => {
-            // Inicializa a UI e a lógica
-            restartGame();
-            
-            // Popula a lista de seleção
-            populateGuessList();
-        };
-
-        // Função para preencher o dropdown de palpites (1 a 100)
-        function populateGuessList() {
-            const select = document.getElementById('guessSelect');
-            select.innerHTML = '<option value="" disabled selected>Selecione seu palpite...</option>';
-            for (let i = 1; i <= 100; i++) {
-                const option = document.createElement('option');
-                option.value = i;
-                option.textContent = i;
-                select.appendChild(option);
+                hideScoreModal();
+                alert(`Recorde de ${nickname} salvo com ${attempts} tentativas!`);
+                initGame(); // Inicia um novo jogo
+            } catch (e) {
+                console.error("Erro ao adicionar recorde:", e);
+                alert("Erro ao salvar recorde. Tente novamente.");
+            } finally {
+                saveScoreButton.disabled = false;
+                saveScoreButton.textContent = "Salvar Recorde!";
             }
         }
 
-        // Inicia ou reinicia o jogo
-        function restartGame() {
-            // Define o número secreto
+
+        // --- Lógica do Jogo ---
+
+        /**
+         * Gera um número aleatório entre 1 e 100 e reinicia o estado do jogo.
+         */
+        function initGame() {
             secretNumber = Math.floor(Math.random() * 100) + 1;
             attempts = 0;
-            gameActive = true;
-
-            // Atualiza a UI
-            attemptsLeftElement.textContent = maxAttempts;
-            messageElement.textContent = "Adivinhe o número entre 1 e 100!";
-            messageElement.className = "text-gray-600";
-            guessButton.disabled = false;
-            guessButton.classList.remove('opacity-50');
-
-            // Reabilita e reseta o dropdown
-            populateGuessList();
-            guessSelect.disabled = false;
             
-            // Esconde o modal caso esteja aberto
-            modal.classList.add('hidden');
+            // Atualiza a UI
+            attemptsDisplay.textContent = attempts;
+            messageDisplay.textContent = "Digite um número e clique em Verificar!";
+            messageDisplay.classList.remove('bg-win', 'bg-lose', 'text-white');
+            messageDisplay.classList.add('bg-gray-700', 'text-gray-300');
+            
+            guessInput.value = '';
+            guessInput.disabled = false;
+            checkButton.disabled = false;
+            resetButton.classList.add('hidden');
+            errorDisplay.classList.add('hidden');
+            inputArea.classList.remove('hidden');
+
+            console.log("Novo número secreto gerado: " + secretNumber);
         }
-        
-        // Função principal para verificar o palpite
-        function checkGuess() {
-            if (!gameActive) return;
 
-            const guess = parseInt(guessSelect.value);
-
-            // Validação
+        /**
+         * Valida o palpite do usuário.
+         */
+        function validateGuess(guess) {
             if (isNaN(guess) || guess < 1 || guess > 100) {
-                messageElement.textContent = "Por favor, selecione um número válido na lista.";
+                errorDisplay.classList.remove('hidden');
+                messageDisplay.textContent = "Palpite inválido!";
+                return false;
+            }
+            errorDisplay.classList.add('hidden');
+            return true;
+        }
+
+        /**
+         * Função de fim de jogo (Vitória ou Derrota).
+         */
+        function gameOver(isWin, feedbackMessage, newBgClass, newTextColor) {
+            messageDisplay.innerHTML = feedbackMessage;
+            messageDisplay.classList.remove('bg-gray-700', 'bg-win', 'bg-lose', 'text-gray-300', 'text-white');
+            messageDisplay.classList.add(newBgClass, newTextColor);
+
+            guessInput.disabled = true;
+            checkButton.disabled = true;
+            resetButton.classList.remove('hidden');
+            inputArea.classList.add('hidden');
+
+            if (isWin) {
+                showScoreModal(attempts);
+            }
+        }
+
+        /**
+         * Verifica o palpite do jogador e atualiza o estado do jogo.
+         */
+        function checkGuess() {
+            const guess = parseInt(guessInput.value);
+
+            if (!validateGuess(guess)) {
                 return;
             }
 
-            // Desabilita a opção escolhida para evitar repetição
-            const selectedOption = guessSelect.querySelector(`option[value="${guess}"]`);
-            if (selectedOption) {
-                selectedOption.disabled = true;
-            }
-            guessSelect.value = ""; // Reseta a seleção para a opção padrão
-
             attempts++;
-            attemptsLeftElement.textContent = maxAttempts - attempts;
+            attemptsDisplay.textContent = attempts;
+
+            let feedbackMessage = "";
 
             if (guess === secretNumber) {
-                // Vitória
-                handleWin();
+                feedbackMessage = `🎉 Parabéns! Você adivinhou o número ${secretNumber} em ${attempts} tentativas!`;
+                gameOver(true, feedbackMessage, 'bg-win', 'text-white');
+                return;
             } else if (attempts >= maxAttempts) {
-                // Derrota
-                handleLoss();
+                feedbackMessage = `😢 Fim de jogo! Você não conseguiu adivinhar. O número era ${secretNumber}.`;
+                gameOver(false, feedbackMessage, 'bg-lose', 'text-white');
+                return;
             } else if (guess < secretNumber) {
-                messageElement.textContent = `Seu palpite (${guess}) é muito baixo. Tente um número maior.`;
-                messageElement.className = "text-red-500 font-medium";
-            } else {
-                messageElement.textContent = `Seu palpite (${guess}) é muito alto. Tente um número menor.`;
-                messageElement.className = "text-blue-500 font-medium";
+                feedbackMessage = `Seu palpite (${guess}) está **MUITO BAIXO**. Tente um número maior.`;
+            } else { // guess > secretNumber
+                feedbackMessage = `Seu palpite (${guess}) está **MUITO ALTO**. Tente um número menor.`;
             }
+
+            // Atualiza o display da mensagem
+            messageDisplay.innerHTML = feedbackMessage;
+            messageDisplay.classList.remove('bg-win', 'bg-lose', 'text-white');
+            messageDisplay.classList.add('bg-gray-700', 'text-gray-300');
+            
+            guessInput.value = '';
+            guessInput.focus();
         }
 
-        // Lógica de vitória
-        function handleWin() {
-            gameActive = false;
-            guessButton.disabled = true;
-            guessSelect.disabled = true;
-            messageElement.textContent = `Parabéns! Você adivinhou o número ${secretNumber} em ${attempts} tentativas!`;
-            messageElement.className = "text-green-600 font-bold text-xl";
+        // --- Configuração dos Eventos ---
+        checkButton.addEventListener('click', checkGuess);
 
-            // Abre o modal para coletar o nickname e salvar a pontuação
-            showScoreModal(attempts);
-        }
-
-        // Lógica de derrota
-        function handleLoss() {
-            gameActive = false;
-            guessButton.disabled = true;
-            guessSelect.disabled = true;
-            messageElement.textContent = `Fim de jogo! O número secreto era ${secretNumber}.`;
-            messageElement.className = "text-red-700 font-bold text-xl";
-        }
-        
-        // Abre o modal de submissão de score
-        window.showScoreModal = (finalAttempts) => {
-            const modalAttempts = document.getElementById('modalAttempts');
-            modalAttempts.textContent = finalAttempts;
-            modal.classList.remove('hidden');
-        };
-
-        // Envia o score e fecha o modal
-        window.submitScore = () => {
-            const nickname = nicknameInput.value.trim() || 'Jogador Anônimo';
-            if (typeof window.saveScore === 'function') {
-                // Chama a função global do Firebase para salvar
-                window.saveScore(nickname, attempts);
+        guessInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' || e.keyCode === 13) {
+                e.preventDefault(); 
+                checkGuess();
             }
-            modal.classList.add('hidden');
+        });
+
+        resetButton.addEventListener('click', initGame);
+
+        // Eventos do Modal
+        saveScoreButton.addEventListener('click', saveScore);
+        closeModalButton.addEventListener('click', () => {
+            hideScoreModal();
+            initGame(); // Inicia um novo jogo sem salvar
+        });
+
+        // Inicia o Firebase e o Jogo
+        window.onload = () => {
+            initFirebase();
+            initGame();
         };
-
-        // Expõe as funções principais para o HTML
-        window.checkGuess = checkGuess;
-        window.restartGame = restartGame;
-
     </script>
-    
-    <!-- Container Principal do Jogo -->
-    <div class="bg-white rounded-3xl shadow-2xl p-6 sm:p-10 w-full max-w-lg mb-8">
-        <h1 class="text-3xl font-extrabold text-center text-purple-700 mb-4">🔮 Adivinhe o Número</h1>
-        <p class="text-center text-gray-500 mb-6">Você tem 10 chances para acertar o número secreto (1 a 100).</p>
-
-        <!-- Área de Mensagens -->
-        <p id="message" class="text-center text-gray-600 font-medium text-lg mb-4 h-8">Adivinhe o número entre 1 e 100!</p>
-
-        <!-- Contador de Tentativas -->
-        <div class="flex justify-between items-center mb-6 p-3 bg-indigo-50 rounded-xl">
-            <span class="text-gray-700 font-medium">Tentativas Restantes:</span>
-            <span id="attemptsLeft" class="text-2xl font-bold text-indigo-600">10</span>
-        </div>
-
-        <!-- Controles do Jogo -->
-        <div class="flex flex-col space-y-4 mb-6">
-            <!-- Dropdown de Palpites -->
-            <select id="guessSelect" class="w-full p-3 border border-gray-300 rounded-xl focus:border-purple-500 focus:ring focus:ring-purple-200 transition duration-150 text-lg">
-                <option value="" disabled selected>Selecione seu palpite...</option>
-            </select>
-            
-            <!-- Botão de Palpite -->
-            <button id="guessButton" onclick="checkGuess()" class="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 transition duration-300 shadow-md transform hover:scale-[1.01]">
-                Dar Palpite
-            </button>
-            
-            <!-- Botão de Reinício -->
-            <button id="restartButton" onclick="restartGame()" class="w-full bg-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-300 transition duration-300 shadow-md">
-                Reiniciar Jogo
-            </button>
-        </div>
-    </div>
-
-    <!-- Placar de Recordes -->
-    <div class="bg-white rounded-3xl shadow-xl p-6 w-full max-w-lg">
-        <h2 class="text-2xl font-bold text-center text-yellow-600 mb-4 flex items-center justify-center">
-            <span class="mr-2">🏆</span> Placar Global de Recordes 
-        </h2>
-        <ul id="leaderboardList" class="space-y-3">
-            <li class="p-2 text-center text-gray-500">Carregando placar...</li>
-        </ul>
-        <p class="mt-4 text-xs text-center text-gray-400">Menor número de tentativas = Melhor Score</p>
-    </div>
-
-    <!-- Modal de Submissão de Nickname (Escondido por padrão) -->
-    <div id="scoreModal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl">
-            <h3 class="text-xl font-bold text-purple-700 mb-3">Novo Recorde!</h3>
-            <p class="text-gray-600 mb-4">Você venceu em apenas <span id="modalAttempts" class="font-bold text-purple-600">X</span> tentativas!</p>
-            
-            <label for="nicknameInput" class="block text-sm font-medium text-gray-700 mb-1">Seu Nickname:</label>
-            <input type="text" id="nicknameInput" maxlength="20" placeholder="Digite seu apelido (máx 20)" class="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:ring-purple-500 focus:border-purple-500">
-            
-            <button onclick="submitScore()" class="w-full bg-green-500 text-white font-bold py-2 rounded-xl hover:bg-green-600 transition duration-300">
-                Salvar Recorde!
-            </button>
-        </div>
-    </div>
-
 </body>
 </html>
