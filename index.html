@@ -1,0 +1,373 @@
+<!-- 
+  Jogo: Adivinhe o Número
+  Funcionalidade: Jogo clássico de adivinhação com placar de recordes global e seleção por lista.
+  Tecnologias: HTML, Tailwind CSS, JavaScript, Firebase Firestore (para recordes).
+-->
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Adivinhe o Número</title>
+    <!-- Carregamento do Tailwind CSS para estilo responsivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4">
+
+    <!-- Configurações e Importações do Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, collection, query, limit, onSnapshot, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Variáveis globais de Firebase fornecidas pelo ambiente
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let app, db, auth;
+        let userId = 'anon';
+
+        // Inicializa o Firebase e realiza o login
+        async function initializeFirebase() {
+            if (!firebaseConfig) {
+                console.error("Erro: Configuração do Firebase não encontrada.");
+                document.getElementById('message').textContent = "Erro ao carregar o banco de dados. Tente novamente.";
+                return;
+            }
+
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Autenticação: tenta com token customizado ou anônima
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                // Ouve as mudanças no estado de autenticação
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        // Inicia o listener do placar após a autenticação
+                        setupLeaderboardListener();
+                    } else {
+                        // Usuário deslogado, mas em ambiente anônimo o userId já é 'anon'
+                        console.log("Usuário não autenticado. Usando ID anônimo.");
+                    }
+                });
+
+            } catch (error) {
+                console.error("Erro na inicialização do Firebase ou autenticação:", error);
+                document.getElementById('message').textContent = `Erro ao conectar: ${error.message}`;
+            }
+        }
+
+        // Função para salvar a pontuação no Firestore
+        window.saveScore = async (nickname, attempts) => {
+            if (!db || !userId) {
+                console.error("Banco de dados ou ID do usuário não disponível.");
+                return;
+            }
+
+            const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+            
+            try {
+                // Cria um ID de documento único (poderia ser o UID do usuário, mas permite múltiplos scores)
+                const scoreData = {
+                    nickname: nickname || 'Anônimo',
+                    attempts: attempts,
+                    timestamp: new Date().toISOString(),
+                    userId: userId,
+                };
+                
+                // Salva a pontuação
+                await setDoc(doc(leaderboardRef), scoreData);
+                console.log("Pontuação salva com sucesso!");
+
+            } catch (e) {
+                console.error("Erro ao adicionar documento: ", e);
+                document.getElementById('message').textContent = `Erro ao salvar pontuação: ${e.message}`;
+            }
+        };
+
+        // Função para ouvir e atualizar o placar em tempo real
+        function setupLeaderboardListener() {
+            if (!db) return;
+
+            const leaderboardRef = collection(db, 'artifacts', appId, 'public', 'data', 'leaderboard');
+            // Consulta: Tenta ordenar pelo menor número de tentativas
+            const q = query(leaderboardRef, limit(10)); 
+
+            onSnapshot(q, async (querySnapshot) => {
+                const scores = [];
+                querySnapshot.forEach((doc) => {
+                    const data = doc.data();
+                    scores.push(data);
+                });
+
+                // Ordena em memória (já que o Firestore pode ter problemas de índice no orderBy)
+                scores.sort((a, b) => a.attempts - b.attempts);
+
+                updateLeaderboardUI(scores);
+            }, (error) => {
+                console.error("Erro ao ouvir o placar:", error);
+            });
+        }
+
+        // Função para renderizar o placar na UI
+        function updateLeaderboardUI(scores) {
+            const list = document.getElementById('leaderboardList');
+            if (!list) return;
+
+            list.innerHTML = ''; // Limpa a lista atual
+
+            if (scores.length === 0) {
+                list.innerHTML = '<li class="p-2 text-center text-gray-500">Nenhum recorde ainda. Seja o primeiro!</li>';
+                return;
+            }
+
+            scores.forEach((score, index) => {
+                const li = document.createElement('li');
+                li.className = `flex justify-between items-center p-3 rounded-xl shadow-md ${index < 3 ? 'bg-yellow-100 border-2 border-yellow-500' : 'bg-white'}`;
+                
+                // Formata o Rank
+                const rank = index + 1;
+                const rankDisplay = document.createElement('span');
+                rankDisplay.className = 'font-bold text-lg w-1/12 text-center';
+                rankDisplay.textContent = `#${rank}`;
+
+                // Formata o Nickname
+                const nicknameDisplay = document.createElement('span');
+                nicknameDisplay.className = 'flex-grow font-semibold text-gray-800 ml-4';
+                nicknameDisplay.textContent = score.nickname.substring(0, 20); // Limita o tamanho do nick
+
+                // Formata as Tentativas
+                const attemptsDisplay = document.createElement('span');
+                attemptsDisplay.className = 'text-right font-bold text-purple-600 w-2/12';
+                attemptsDisplay.textContent = `${score.attempts} Tentativas`;
+
+                li.appendChild(rankDisplay);
+                li.appendChild(nicknameDisplay);
+                li.appendChild(attemptsDisplay);
+                list.appendChild(li);
+            });
+        }
+
+        initializeFirebase();
+
+        // Expõe funções ao escopo global para acesso pelo HTML/JS do jogo
+        window.initializeFirebase = initializeFirebase;
+        window.updateLeaderboardUI = updateLeaderboardUI;
+    </script>
+    
+    <!-- Lógica do Jogo -->
+    <script>
+        let secretNumber;
+        let attempts = 0;
+        const maxAttempts = 10;
+        let gameActive = false;
+        
+        // Elementos UI
+        const guessSelect = document.getElementById('guessSelect');
+        const messageElement = document.getElementById('message');
+        const attemptsLeftElement = document.getElementById('attemptsLeft');
+        const guessButton = document.getElementById('guessButton');
+        const restartButton = document.getElementById('restartButton');
+        const modal = document.getElementById('scoreModal');
+        const nicknameInput = document.getElementById('nicknameInput');
+
+        // Inicializa o jogo ao carregar a página
+        window.onload = () => {
+            // Inicializa a UI e a lógica
+            restartGame();
+            
+            // Popula a lista de seleção
+            populateGuessList();
+        };
+
+        // Função para preencher o dropdown de palpites (1 a 100)
+        function populateGuessList() {
+            const select = document.getElementById('guessSelect');
+            select.innerHTML = '<option value="" disabled selected>Selecione seu palpite...</option>';
+            for (let i = 1; i <= 100; i++) {
+                const option = document.createElement('option');
+                option.value = i;
+                option.textContent = i;
+                select.appendChild(option);
+            }
+        }
+
+        // Inicia ou reinicia o jogo
+        function restartGame() {
+            // Define o número secreto
+            secretNumber = Math.floor(Math.random() * 100) + 1;
+            attempts = 0;
+            gameActive = true;
+
+            // Atualiza a UI
+            attemptsLeftElement.textContent = maxAttempts;
+            messageElement.textContent = "Adivinhe o número entre 1 e 100!";
+            messageElement.className = "text-gray-600";
+            guessButton.disabled = false;
+            guessButton.classList.remove('opacity-50');
+
+            // Reabilita e reseta o dropdown
+            populateGuessList();
+            guessSelect.disabled = false;
+            
+            // Esconde o modal caso esteja aberto
+            modal.classList.add('hidden');
+        }
+        
+        // Função principal para verificar o palpite
+        function checkGuess() {
+            if (!gameActive) return;
+
+            const guess = parseInt(guessSelect.value);
+
+            // Validação
+            if (isNaN(guess) || guess < 1 || guess > 100) {
+                messageElement.textContent = "Por favor, selecione um número válido na lista.";
+                return;
+            }
+
+            // Desabilita a opção escolhida para evitar repetição
+            const selectedOption = guessSelect.querySelector(`option[value="${guess}"]`);
+            if (selectedOption) {
+                selectedOption.disabled = true;
+            }
+            guessSelect.value = ""; // Reseta a seleção para a opção padrão
+
+            attempts++;
+            attemptsLeftElement.textContent = maxAttempts - attempts;
+
+            if (guess === secretNumber) {
+                // Vitória
+                handleWin();
+            } else if (attempts >= maxAttempts) {
+                // Derrota
+                handleLoss();
+            } else if (guess < secretNumber) {
+                messageElement.textContent = `Seu palpite (${guess}) é muito baixo. Tente um número maior.`;
+                messageElement.className = "text-red-500 font-medium";
+            } else {
+                messageElement.textContent = `Seu palpite (${guess}) é muito alto. Tente um número menor.`;
+                messageElement.className = "text-blue-500 font-medium";
+            }
+        }
+
+        // Lógica de vitória
+        function handleWin() {
+            gameActive = false;
+            guessButton.disabled = true;
+            guessSelect.disabled = true;
+            messageElement.textContent = `Parabéns! Você adivinhou o número ${secretNumber} em ${attempts} tentativas!`;
+            messageElement.className = "text-green-600 font-bold text-xl";
+
+            // Abre o modal para coletar o nickname e salvar a pontuação
+            showScoreModal(attempts);
+        }
+
+        // Lógica de derrota
+        function handleLoss() {
+            gameActive = false;
+            guessButton.disabled = true;
+            guessSelect.disabled = true;
+            messageElement.textContent = `Fim de jogo! O número secreto era ${secretNumber}.`;
+            messageElement.className = "text-red-700 font-bold text-xl";
+        }
+        
+        // Abre o modal de submissão de score
+        window.showScoreModal = (finalAttempts) => {
+            const modalAttempts = document.getElementById('modalAttempts');
+            modalAttempts.textContent = finalAttempts;
+            modal.classList.remove('hidden');
+        };
+
+        // Envia o score e fecha o modal
+        window.submitScore = () => {
+            const nickname = nicknameInput.value.trim() || 'Jogador Anônimo';
+            if (typeof window.saveScore === 'function') {
+                // Chama a função global do Firebase para salvar
+                window.saveScore(nickname, attempts);
+            }
+            modal.classList.add('hidden');
+        };
+
+        // Expõe as funções principais para o HTML
+        window.checkGuess = checkGuess;
+        window.restartGame = restartGame;
+
+    </script>
+    
+    <!-- Container Principal do Jogo -->
+    <div class="bg-white rounded-3xl shadow-2xl p-6 sm:p-10 w-full max-w-lg mb-8">
+        <h1 class="text-3xl font-extrabold text-center text-purple-700 mb-4">🔮 Adivinhe o Número</h1>
+        <p class="text-center text-gray-500 mb-6">Você tem 10 chances para acertar o número secreto (1 a 100).</p>
+
+        <!-- Área de Mensagens -->
+        <p id="message" class="text-center text-gray-600 font-medium text-lg mb-4 h-8">Adivinhe o número entre 1 e 100!</p>
+
+        <!-- Contador de Tentativas -->
+        <div class="flex justify-between items-center mb-6 p-3 bg-indigo-50 rounded-xl">
+            <span class="text-gray-700 font-medium">Tentativas Restantes:</span>
+            <span id="attemptsLeft" class="text-2xl font-bold text-indigo-600">10</span>
+        </div>
+
+        <!-- Controles do Jogo -->
+        <div class="flex flex-col space-y-4 mb-6">
+            <!-- Dropdown de Palpites -->
+            <select id="guessSelect" class="w-full p-3 border border-gray-300 rounded-xl focus:border-purple-500 focus:ring focus:ring-purple-200 transition duration-150 text-lg">
+                <option value="" disabled selected>Selecione seu palpite...</option>
+            </select>
+            
+            <!-- Botão de Palpite -->
+            <button id="guessButton" onclick="checkGuess()" class="w-full bg-purple-600 text-white font-bold py-3 rounded-xl hover:bg-purple-700 transition duration-300 shadow-md transform hover:scale-[1.01]">
+                Dar Palpite
+            </button>
+            
+            <!-- Botão de Reinício -->
+            <button id="restartButton" onclick="restartGame()" class="w-full bg-gray-200 text-gray-700 font-bold py-3 rounded-xl hover:bg-gray-300 transition duration-300 shadow-md">
+                Reiniciar Jogo
+            </button>
+        </div>
+    </div>
+
+    <!-- Placar de Recordes -->
+    <div class="bg-white rounded-3xl shadow-xl p-6 w-full max-w-lg">
+        <h2 class="text-2xl font-bold text-center text-yellow-600 mb-4 flex items-center justify-center">
+            <span class="mr-2">🏆</span> Placar Global de Recordes 
+        </h2>
+        <ul id="leaderboardList" class="space-y-3">
+            <li class="p-2 text-center text-gray-500">Carregando placar...</li>
+        </ul>
+        <p class="mt-4 text-xs text-center text-gray-400">Menor número de tentativas = Melhor Score</p>
+    </div>
+
+    <!-- Modal de Submissão de Nickname (Escondido por padrão) -->
+    <div id="scoreModal" class="hidden fixed inset-0 bg-gray-800 bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl p-6 w-full max-w-sm shadow-2xl">
+            <h3 class="text-xl font-bold text-purple-700 mb-3">Novo Recorde!</h3>
+            <p class="text-gray-600 mb-4">Você venceu em apenas <span id="modalAttempts" class="font-bold text-purple-600">X</span> tentativas!</p>
+            
+            <label for="nicknameInput" class="block text-sm font-medium text-gray-700 mb-1">Seu Nickname:</label>
+            <input type="text" id="nicknameInput" maxlength="20" placeholder="Digite seu apelido (máx 20)" class="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:ring-purple-500 focus:border-purple-500">
+            
+            <button onclick="submitScore()" class="w-full bg-green-500 text-white font-bold py-2 rounded-xl hover:bg-green-600 transition duration-300">
+                Salvar Recorde!
+            </button>
+        </div>
+    </div>
+
+</body>
+</html>
