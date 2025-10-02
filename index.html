@@ -107,7 +107,10 @@
 
     <!-- Container do Placar Global -->
     <div class="w-full max-w-xs sm:max-w-sm bg-primary-bg p-6 rounded-xl shadow-2xl border border-gray-700 order-1 sm:order-2">
-        <h2 class="text-2xl font-bold text-white mb-4 text-center">🏆 Placar Global</h2>
+        <h2 class="text-2xl font-bold text-white mb-1 text-center">🏆 Placar Global</h2>
+        <p id="currentUserId" class="text-xs text-gray-500 text-center mb-4 truncate">
+            Status: Conectando...
+        </p> 
         
         <!-- Lista de Scores -->
         <div id="leaderboardContainer" class="space-y-2">
@@ -188,6 +191,7 @@
         const saveScoreButton = document.getElementById('saveScoreButton');
         const closeModalButton = document.getElementById('closeModalButton');
         const loadingMessage = document.getElementById('loadingMessage');
+        const currentUserIdDisplay = document.getElementById('currentUserId');
 
 
         /**
@@ -198,6 +202,9 @@
                 if (Object.keys(firebaseConfig).length === 0) {
                     console.error("Firebase config not available. Leaderboard will not function.");
                     leaderboardContainer.innerHTML = `<p class="text-lose text-center">Placar indisponível (Firebase não configurado).</p>`;
+                    currentUserIdDisplay.textContent = "Erro de conexão Firebase.";
+                    currentUserIdDisplay.classList.remove('text-gray-500');
+                    currentUserIdDisplay.classList.add('text-lose');
                     return;
                 }
                 
@@ -214,6 +221,11 @@
 
                 userId = auth.currentUser?.uid || crypto.randomUUID();
                 
+                // Atualiza o status de conexão
+                currentUserIdDisplay.textContent = `Seu ID: ${userId}`;
+                currentUserIdDisplay.classList.remove('text-gray-500');
+                currentUserIdDisplay.classList.add('text-accent');
+
                 console.log("Firebase e autenticação inicializados. User ID:", userId);
                 
                 // Inicia o listener do placar após a autenticação
@@ -222,6 +234,9 @@
             } catch (error) {
                 console.error("Erro ao inicializar Firebase:", error);
                 leaderboardContainer.innerHTML = `<p class="text-lose text-center">Erro ao conectar com o Placar.</p>`;
+                currentUserIdDisplay.textContent = "Erro de conexão Firebase.";
+                currentUserIdDisplay.classList.remove('text-gray-500');
+                currentUserIdDisplay.classList.add('text-lose');
             }
         }
         
@@ -308,7 +323,8 @@
             const nickname = nicknameInput.value.trim().substring(0, 12);
 
             if (!nickname || nickname.length < 2) {
-                alert("Por favor, insira um nickname com pelo menos 2 caracteres.");
+                // Modificado para usar um modal customizado no futuro, mas mantendo a simplicidade por enquanto
+                alert("Por favor, insira um nickname com pelo menos 2 caracteres."); 
                 return;
             }
             
@@ -332,7 +348,8 @@
                 });
 
                 hideScoreModal();
-                alert(`Recorde de ${nickname} salvo com ${attempts} tentativas!`);
+                // Modificado para usar um modal customizado no futuro, mas mantendo a simplicidade por enquanto
+                alert(`Recorde de ${nickname} salvo com ${attempts} tentativas!`); 
                 initGame(); // Inicia um novo jogo
             } catch (e) {
                 console.error("Erro ao adicionar recorde:", e);
